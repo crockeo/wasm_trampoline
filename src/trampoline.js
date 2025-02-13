@@ -29,6 +29,9 @@ function callZigWasm(instance, func, object) {
       const result_len = (new Uint8Array(instance.exports.memory.buffer, result_addr)).indexOf(0);
       const result_arr = new Uint8Array(instance.exports.memory.buffer, result_addr, result_len);
       const result = (new TextDecoder()).decode(result_arr);
+
+      instance.exports.free(result_addr, result_len + 1);
+      
       return JSON.parse(result);
     } finally {
       instance.exports.free(stringAddress, encodedString.byteLength);
