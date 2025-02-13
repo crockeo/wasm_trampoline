@@ -8,8 +8,8 @@ const global_allocator = std.mem.Allocator{
 };
 
 export fn allocate(width: usize) *anyopaque {
-    var slice = global_allocator.alloc(u8, width) catch unreachable;
-    return @ptrCast(&slice);
+    const slice = global_allocator.alloc(u8, width) catch unreachable;
+    return @ptrCast(slice.ptr);
 }
 
 export fn free(ptr: *anyopaque, width: usize) void {
@@ -18,53 +18,59 @@ export fn free(ptr: *anyopaque, width: usize) void {
     global_allocator.free(slice);
 }
 
-const MemorySegment = extern struct {
-    ptr: *anyopaque,
-    width: usize,
-};
-
-export fn do_something(req_segment: MemorySegment) MemorySegment {
-    const req = trampoline_deserialize(
-        DoSomethingReq,
-        global_allocator,
-        req_segment.ptr,
-        req_segment.width,
-    ) catch unreachable;
+export fn do_something(ptr: [*]const u8, width: usize) [*c]const u8 {
+    const slice = ptr[0..width];
+    const req = std.json.parseFromSlice(DoSomethingReq, global_allocator, slice, .{}) catch |err| {
+        std.fmt.format(console_writer, "{}", .{err}) catch {};
+        unreachable;
+    };
     defer req.deinit();
 
     const res = do_something_inner(req.value) catch unreachable;
 
-    const raw_res = trampoline_serialize(global_allocator, res) catch unreachable;
-    return raw_res;
+    const res_slice = std.json.stringifyAlloc(global_allocator, res, .{}) catch |err| {
+        std.fmt.format(console_writer, "{}", .{err}) catch {};
+        unreachable;
+    };
+    defer global_allocator.free(res_slice);
+
+    const null_terminated_res_slice = global_allocator.alloc(u8, res_slice.len + 1) catch @panic("OOM");
+    std.mem.copyForwards(u8, null_terminated_res_slice, res_slice);
+    null_terminated_res_slice[null_terminated_res_slice.len - 1] = 0;
+    return @ptrCast(null_terminated_res_slice);
 }
 
 const DoSomethingReq = struct {};
-const DoSomethingRes = struct {};
+const DoSomethingRes = struct {
+    the_meaning: usize,
+};
 
 fn do_something_inner(req: DoSomethingReq) !DoSomethingRes {
     _ = req;
-    return DoSomethingRes{};
-}
-
-fn trampoline_deserialize(
-    comptime T: type,
-    allocator: std.mem.Allocator,
-    ptr: *anyopaque,
-    width: usize,
-) !std.json.Parsed(T) {
-    const slice = @as([*]u8, @alignCast(@ptrCast(ptr)))[0..width];
-    return try std.json.parseFromSlice(T, allocator, slice, .{});
-}
-
-fn trampoline_serialize(
-    allocator: std.mem.Allocator,
-    value: anytype,
-) !MemorySegment {
-    const slice = try std.json.stringifyAlloc(allocator, value, .{});
-    return .{
-        .ptr = @ptrCast(slice),
-        .width = slice.len,
+    return DoSomethingRes{
+        .the_meaning = 42,
     };
 }
 
-fn main() void {}
+// Tools to write to console.log from WASM.
+// Requires that someone provides this `native_console_log` function
+// from inside of WASM-land.
+extern fn native_console_log(message: [*]const u8, len: usize) void;
+fn console_log(message: []const u8) void {
+    native_console_log(message.ptr, message.len);
+}
+
+// And then this is so we can write to console.log with ~fancy formatting~.
+const ConsoleWriterCtx = struct {};
+const ConsoleWriterError = error{};
+
+fn console_writer_writefn(_: ConsoleWriterCtx, bytes: []const u8) ConsoleWriterError!usize {
+    console_log(bytes);
+    return bytes.len;
+}
+const ConsoleWriter = std.io.Writer(
+    ConsoleWriterCtx,
+    ConsoleWriterError,
+    console_writer_writefn,
+);
+const console_writer = ConsoleWriter{ .context = .{} };
