@@ -14,7 +14,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const run_gen_exe = b.addRunArtifact(gen_exe);
-    run_gen_exe.addArg("test.js");
+    run_gen_exe.addArg("src/codegen.zig");
+    run_gen_exe.addArg("src");
     b.default_step.dependOn(&run_gen_exe.step);
 
     const lib = b.addExecutable(.{

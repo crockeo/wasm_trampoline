@@ -26,7 +26,7 @@ export fn do_something(ptr: [*]const u8, width: usize) [*c]const u8 {
     };
     defer req.deinit();
 
-    const res = do_something_inner(req.value) catch unreachable;
+    const res = do_something_inner(WasmMe{}, req.value) catch unreachable;
 
     const res_slice = std.json.stringifyAlloc(global_allocator, res, .{}) catch |err| {
         std.fmt.format(console_writer, "{}", .{err}) catch {};
@@ -45,7 +45,9 @@ const DoSomethingRes = struct {
     the_meaning: usize,
 };
 
-fn do_something_inner(req: DoSomethingReq) !DoSomethingRes {
+const WasmMe = struct {};
+
+fn do_something_inner(_: WasmMe, req: DoSomethingReq) !DoSomethingRes {
     _ = req;
     return DoSomethingRes{
         .the_meaning = 42,
