@@ -63,8 +63,6 @@ pub fn main() !void {
             continue;
         }
 
-        std.debug.print("=== {s} ===\n", .{entry.basename});
-
         // TODO: make `module_name` unique by tagging this with an index,
         // so that 2 modules of the same name (but different paths)
         // don't get clobbered.
