@@ -106,6 +106,16 @@ fn process_file(
 
         var params = fn_proto.iterate(&tree);
 
+        const function_name = blk: {
+            const function_name_and_paren = get_token_str(
+                content,
+                &tree,
+                fn_proto.name_token orelse unreachable,
+                (fn_proto.name_token orelse unreachable) + 1,
+            );
+            break :blk function_name_and_paren[0 .. function_name_and_paren.len - 1];
+        };
+
         const first_param = params.next() orelse continue;
         if (!is_wasm_sentinel(content, &tree, &first_param)) {
             continue;
@@ -118,12 +128,10 @@ fn process_file(
         }
 
         // TODO: generate the javascript-side trampoline function
-        //
-        // TODO: parse the function name and pass it below in place of the "TODO"
         const trampoline_function = try generate_trampoline_function(
             allocator,
             module_name,
-            "TODO",
+            function_name,
             type_names,
         );
         defer allocator.free(trampoline_function);
@@ -221,7 +229,7 @@ fn generate_trampoline_function(
         );
     }
 
-    try buf_writer.format("    const res = {0s}(WasmMe{{}}", .{function_name});
+    try buf_writer.format("    const res = {0s}.{1s}(.{{}}", .{ module_name, function_name });
     for (type_names.items) |type_name| {
         try buf_writer.format(", {0s}_req", .{type_name});
     }
